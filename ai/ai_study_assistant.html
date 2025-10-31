@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AI StudyMate — Male Voice with Subtitles</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: "Poppins", sans-serif;
+      background: #0e1525;
+      color: white;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    /* Background video */
+    #video {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+      z-index: 10;
+    }
+
+    /* Floating stop button */
+    #floatingStop {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(255,0,0,0.8);
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 10px;
+      font-size: 16px;
+      cursor: pointer;
+      z-index: 50;
+      display: none;
+    }
+
+    /* Subtitle overlay */
+    #subtitle {
+      position: fixed;
+      bottom: 10%;
+      width: 100%;
+      text-align: center;
+      font-size: 22px;
+      font-weight: 500;
+      color: #fff;
+      text-shadow: 0 0 8px rgba(0,0,0,0.8);
+      z-index: 40;
+      opacity: 0;
+      transition: opacity 0.4s;
+      padding: 0 20px;
+    }
+
+    /* Main UI panel */
+    .container {
+      position: relative;
+      z-index: 20;
+      width: 90%;
+      max-width: 700px;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(8px);
+      border-radius: 15px;
+      padding: 20px;
+      text-align: center;
+      box-shadow: 0 0 30px rgba(0,0,0,0.4);
+      transition: opacity 0.4s ease;
+    }
+
+    textarea {
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 10px;
+      border: none;
+      resize: none;
+      outline: none;
+      margin-bottom: 10px;
+      background: rgba(255, 255, 255, 0.15);
+      color: white;
+    }
+
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 5px;
+      color: white;
+      background: #00aaff;
+      transition: 0.3s;
+    }
+
+    button:hover { background: #0088cc; }
+    #stopBtn { background: #ff5555; }
+
+    #response {
+      margin-top: 15px;
+      text-align: left;
+      white-space: pre-wrap;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background video -->
+  <video id="video" src="background.mp4" playsinline muted loop></video>
+
+  <!-- Stop button -->
+  <button id="floatingStop">⏹ Stop</button>
+
+  <!-- Subtitle text -->
+  <div id="subtitle"></div>
+
+  <!-- Chat UI -->
+  <div class="container" id="ui">
+    <h2>🎓 AI StudyMate — Virtual Male Voice Tutor</h2>
+    <textarea id="question" rows="3" placeholder="Ask any educational question..."></textarea><br>
+    <button id="askBtn">Ask</button>
+    <button id="stopBtn">Stop</button>
+    <div id="response"></div>
+  </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const video = document.getElementById("video");
+      const askBtn = document.getElementById("askBtn");
+      const stopBtn = document.getElementById("stopBtn");
+      const floatingStop = document.getElementById("floatingStop");
+      const question = document.getElementById("question");
+      const responseBox = document.getElementById("response");
+      const subtitle = document.getElementById("subtitle");
+      const ui = document.getElementById("ui");
+
+      const bannedWords = [
+        "movie","actor","love","joke","game","music","song","celebrity","weather",
+        "news","friend","relationship","food","travel","sport","team","fashion","meme","funny"
+      ];
+
+      askBtn.onclick = handleAsk;
+      stopBtn.onclick = stopAll;
+      floatingStop.onclick = stopAll;
+
+      question.addEventListener("keypress", e => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          handleAsk();
+        }
+      });
+
+      async function handleAsk() {
+        const text = question.value.trim();
+        if (!text) return;
+        responseBox.innerHTML = "⏳ Fetching educational answer...";
+        const lower = text.toLowerCase();
+
+        if (bannedWords.some(w => lower.includes(w))) {
+          responseBox.innerHTML = "⚠️ Sorry, I can only answer educational questions.";
+          return;
+        }
+
+        try {
+          const answer = await getWikipediaAnswer(text);
+          if (!answer) {
+            responseBox.innerHTML = "❌ No relevant data found on Wikipedia.";
+            return;
+          }
+
+          responseBox.innerHTML = `<b>Answer:</b><br>${answer}`;
+          playVideoAndSpeak(answer);
+        } catch (err) {
+          console.error(err);
+          responseBox.innerHTML = "⚠️ Something went wrong. Try again.";
+        }
+      }
+
+      async function getWikipediaAnswer(query) {
+        const keyword = extractKeyword(query);
+        const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(keyword)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data && data.extract) return `${data.title}: ${data.extract}`;
+        return null;
+      }
+
+      function extractKeyword(text) {
+        const clean = text.replace(/[^\w\s]/g, "").toLowerCase();
+        const words = clean.split(" ").filter(w => w.length > 3);
+        return words[words.length - 1] || words[0];
+      }
+
+      function playVideoAndSpeak(text) {
+        ui.style.opacity = 0;
+        video.style.display = "block";
+        floatingStop.style.display = "block";
+        subtitle.style.opacity = 1;
+        video.muted = false;
+        video.currentTime = 0;
+
+        video.play().catch(() => alert("Please click anywhere to allow video playback."));
+
+        // Split text into chunks for subtitles
+        const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+        let index = 0;
+
+        const showSubtitles = () => {
+          if (index < sentences.length) {
+            subtitle.innerText = sentences[index].trim();
+            index++;
+            setTimeout(showSubtitles, 3500);
+          }
+        };
+        showSubtitles();
+
+        // Male English-Indian voice
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.rate = 1;
+        utter.pitch = 0.8; // deeper male tone
+        utter.volume = 1;
+        utter.lang = "en-IN";
+
+        const voices = speechSynthesis.getVoices();
+        const maleVoice = voices.find(v =>
+          /male|english india|en-in/i.test(v.name + v.lang)
+        ) || voices.find(v => /en-/.test(v.lang));
+
+        if (maleVoice) utter.voice = maleVoice;
+
+        speechSynthesis.cancel();
+        speechSynthesis.speak(utter);
+
+        utter.onend = () => stopAll();
+      }
+
+      function stopAll() {
+        speechSynthesis.cancel();
+        video.pause();
+        video.style.display = "none";
+        floatingStop.style.display = "none";
+        subtitle.style.opacity = 0;
+        ui.style.opacity = 1;
+      }
+
+      window.speechSynthesis.onvoiceschanged = () => {};
+    });
+  </script>
+</body>
+</html>
